@@ -76,62 +76,119 @@ class NonogramSolver:
         
         return list(_generate(0, 0))
 
-    def solve(self):
-        """ロジックに基づいてパズルを解く"""
+    def _check_consistency(self, board):
+        """
+        現在のボードの状態がヒントと矛盾しないかチェックし、
+        単純なロジックで確定できるマスを埋める。
+        戻り値: (矛盾がないか, 更新されたボード)
+        """
         changed = True
         while changed:
             changed = False
 
-            # 1. 行の更新
+            # 行のチェックと更新
             for i in range(self.height):
-                current_row_view = self.board[i, :]
+                current_row = board[i, :]
                 possible_lines = self._get_possible_lines(self.row_hints[i], self.width)
                 
-                # 現在の行の状態と矛盾しないパターンのみに絞り込む
                 valid_lines = [
-                    line for line in possible_lines 
-                    if all(current_row_view[j] in (UNKNOWN, line[j]) for j in range(self.width))
+                    line for line in possible_lines
+                    if all(current_row[j] in (UNKNOWN, line[j]) for j in range(self.width))
                 ]
                 
-                if not valid_lines: continue
+                if not valid_lines:
+                    return False, None  # 矛盾発生
 
-                # 全ての有効なパターンで共通するセルを確定させる
                 for j in range(self.width):
-                    if current_row_view[j] == UNKNOWN:
+                    if current_row[j] == UNKNOWN:
                         first_val = valid_lines[0][j]
                         if all(line[j] == first_val for line in valid_lines):
-                            self.board[i, j] = first_val
+                            board[i, j] = first_val
                             changed = True
 
-            # 2. 列の更新
+            # 列のチェックと更新
             for j in range(self.width):
-                current_col_view = self.board[:, j]
+                current_col = board[:, j]
                 possible_lines = self._get_possible_lines(self.col_hints[j], self.height)
                 
                 valid_lines = [
                     line for line in possible_lines
-                    if all(current_col_view[i] in (UNKNOWN, line[i]) for i in range(self.height))
+                    if all(current_col[i] in (UNKNOWN, line[i]) for i in range(self.height))
                 ]
 
-                if not valid_lines: continue
+                if not valid_lines:
+                    return False, None # 矛盾発生
                 
                 for i in range(self.height):
-                    if current_col_view[i] == UNKNOWN:
+                    if current_col[i] == UNKNOWN:
                         first_val = valid_lines[0][i]
                         if all(line[i] == first_val for line in valid_lines):
-                            self.board[i, j] = first_val
+                            board[i, j] = first_val
                             changed = True
+        return True, board
+
+    def solve(self):
+        """パズルを解くためのメイン関数。再帰的な解法を呼び出す。"""
+        # 初めに基本的な絞り込みを行う
+        is_consistent, initial_board = self._check_consistency(self.board.copy())
+        if not is_consistent:
+            print("\nInitial board is inconsistent. No solution possible.")
+            self.print_board()
+            return
+
+        solution = self._solve_recursive(initial_board)
         
-        print("\nFinal board:")
+        if solution is not None:
+            self.board = solution
+            print("\nSolution found:")
+        else:
+            print("\nNo solution found.")
+
         self.print_board()
+
+    def _solve_recursive(self, current_board):
+        """バックトラッキング（仮置き）を用いた再帰的なソルバー"""
+        
+        # 未確定のマスを探す
+        unknown_pos = np.where(current_board == UNKNOWN)
+        if len(unknown_pos[0]) == 0:
+            return current_board  # すべてのマスが確定したら、それが解
+
+        # 最初の未確定のマスで試行錯誤する
+        i, j = unknown_pos[0][0], unknown_pos[1][0]
+
+        # 1. マスを FILLED (■) だと仮定してみる
+        board_copy_filled = current_board.copy()
+        board_copy_filled[i, j] = FILLED
+        is_consistent, deduced_board = self._check_consistency(board_copy_filled)
+        if is_consistent:
+            solution = self._solve_recursive(deduced_board)
+            if solution is not None:
+                return solution
+
+        # 2. マスを EMPTY (.) だと仮定してみる
+        board_copy_empty = current_board.copy()
+        board_copy_empty[i, j] = EMPTY
+        is_consistent, deduced_board = self._check_consistency(board_copy_empty)
+        if is_consistent:
+            solution = self._solve_recursive(deduced_board)
+            if solution is not None:
+                return solution
+            
+        # どちらの仮定でも解けなかった
+        return None
+
+
+
+
 
 
 if __name__ == '__main__':
-    # 8x6 "Ship" shape hints
-    row_ship = [[1], [2], [3], [7], [7], []]
-    col_ship = [[2], [2], [3], [3], [4], [5], [2], []]
+    # 5x5 "Cross" shape hints
+    row_hints = [[1], [5], [1], [1], [1]]
+    col_hints = [[1], [5], [1], [1], [1]]
 
-    solver = NonogramSolver(row_ship, col_ship)
-    print("Initial board (Solving Ship-shape):")
+    solver = NonogramSolver(row_hints, col_hints)
+    print("\n\nInitial board (Solving Cross-shape):")
     solver.print_board()
     solver.solve()
